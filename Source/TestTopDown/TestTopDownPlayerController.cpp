@@ -23,9 +23,12 @@ ATestTopDownPlayerController::ATestTopDownPlayerController()
 }
 
 void ATestTopDownPlayerController::BeginPlay()
-{
-	// Call the base class  
+{  
+
 	Super::BeginPlay();
+
+	// Cast Character
+	ControlPawn = Cast<ATestTopDownCharacter>(GetPawn());
 
 	//Add Input Mapping Context
 	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
@@ -49,12 +52,13 @@ void ATestTopDownPlayerController::StopShooting_Implementation()
 
 void ATestTopDownPlayerController::SetupInputComponent()
 {
-	// set up gameplay key bindings
+	// Set up gameplay key bindings
 	Super::SetupInputComponent();
 
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
 	{
+		
 		// Setup mouse input events
 		EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Started, this, &ATestTopDownPlayerController::OnInputStarted);
 		EnhancedInputComponent->BindAction(SetDestinationClickAction, ETriggerEvent::Triggered, this, &ATestTopDownPlayerController::OnSetDestinationTriggered);
@@ -82,6 +86,20 @@ void ATestTopDownPlayerController::SetupInputComponent()
 		EnhancedInputComponent->BindAction(SetLeftAction, ETriggerEvent::Triggered, this, &ATestTopDownPlayerController::OnMoveLeftTriggered);
 		EnhancedInputComponent->BindAction(SetLeftAction, ETriggerEvent::Completed, this, &ATestTopDownPlayerController::OnMoveRealeased);
 		EnhancedInputComponent->BindAction(SetLeftAction, ETriggerEvent::Canceled, this, &ATestTopDownPlayerController::OnMoveRealeased);
+
+		// Setup reload weapon
+		EnhancedInputComponent->BindAction(SetReloadAction, ETriggerEvent::Triggered, this, &ATestTopDownPlayerController::OnInputReloadTriggered);
+
+		// Setup interact
+		EnhancedInputComponent->BindAction(SetInteractAction, ETriggerEvent::Triggered, this, &ATestTopDownPlayerController::OnInputInteractTriggered);
+
+		// Setup weapon slots
+		EnhancedInputComponent->BindAction(SetSelectFirstWeaponSlotAction, ETriggerEvent::Triggered, this, &ATestTopDownPlayerController::OnInputSelectFirstWeaponSlotTriggered);
+		EnhancedInputComponent->BindAction(SetSelectSecondWeaponSlotAction, ETriggerEvent::Triggered, this, &ATestTopDownPlayerController::OnInputSelectSecondWeaponSlotTriggered);
+
+		// Setup pause
+		EnhancedInputComponent->BindAction(SetPauseAction, ETriggerEvent::Completed, this, &ATestTopDownPlayerController::OnInputPauseTriggered);
+		
 	}
 	else
 	{
@@ -93,14 +111,16 @@ void ATestTopDownPlayerController::SetupInputComponent()
 
 void ATestTopDownPlayerController::OnInputStarted()
 {
-	UE_LOG(LogTemp, Error, TEXT("I ready for shoot"));
+	// Change moving speed on aiming start
 	MoveSpeed = 0.5f;
+	UE_LOG(LogTemp, Error, TEXT("I ready for shoot"));
+
 }
 
 // Triggered every frame when the input is held down
 void ATestTopDownPlayerController::OnSetDestinationTriggered()
 {
-	
+
 	 // We look for the location in the world where the player has pressed the input
 	FHitResult Hit;
 	bool bHitSuccessful = GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, true, Hit);
@@ -120,6 +140,59 @@ void ATestTopDownPlayerController::OnSetDestinationReleased()
 	MoveSpeed = 1.0f;
 }
 
+void ATestTopDownPlayerController::OnInputReloadTriggered()
+{
+	ControlPawn->ReloadWeapon();
+}
+
+void ATestTopDownPlayerController::OnInputInteractTriggered()
+{
+	if (ControlPawn)
+	{
+		for (int32 i = 0; i < ControlPawn->ItemsInRad.Num(); ++i)
+		{
+			AActor* Item = ControlPawn->ItemsInRad[i];
+			if (Item && this->GetNewItem(Item))
+			{
+				if (i >= ControlPawn->ItemsInRad.Num())
+				{
+					break;
+				}
+				i--;
+			}
+		}
+	}
+}
+
+void ATestTopDownPlayerController::OnInputSelectFirstWeaponSlotTriggered()
+{
+	if (ControlPawn && ControlPawn->GetFirstWeaponSlot()->IsWeaponValid())
+	{
+		this->ActivateSelectedWeaponSlot(ControlPawn->GetFirstWeaponSlot());
+	}
+}
+
+void ATestTopDownPlayerController::OnInputSelectSecondWeaponSlotTriggered()
+{
+	if (ControlPawn && ControlPawn->GetSecondWeaponSlot()->IsWeaponValid())
+	{
+		this->ActivateSelectedWeaponSlot(ControlPawn->GetSecondWeaponSlot());
+	}
+}
+
+void ATestTopDownPlayerController::OnInputPauseTriggered()
+{
+	UE_LOG(LogTemp, Error, TEXT("PAUSE"));
+	
+	OpenPauseMenuWidget();
+
+	FInputModeUIOnly InputMode;
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock); 
+
+	this->SetInputMode(InputMode);
+	SetPause(true);
+}
+
 void ATestTopDownPlayerController::OnInputMoveStarted()
 {
 	//UE_LOG(LogTemp, Error, TEXT("I got input"));
@@ -128,28 +201,28 @@ void ATestTopDownPlayerController::OnInputMoveStarted()
 // Add Pawn movement on triggers
 void ATestTopDownPlayerController::OnMoveTopTriggered()
 {
-	if (GetPawn())
+	if (ControlPawn && !IsPaused())
 	{
 		GetPawn()->AddMovementInput(FVector(1, 0, 0), MoveSpeed);
 	}
 }
 void ATestTopDownPlayerController::OnMoveDownTriggered()
 {
-	if (GetPawn())
+	if (ControlPawn && !IsPaused())
 	{
 		GetPawn()->AddMovementInput(FVector(1, 0, 0), -MoveSpeed);
 	}
 }
 void ATestTopDownPlayerController::OnMoveRightTriggered()
 {
-	if (GetPawn())
+	if (ControlPawn && !IsPaused())
 	{
 		GetPawn()->AddMovementInput(FVector(0, 1, 0), MoveSpeed);
 	}
 }
 void ATestTopDownPlayerController::OnMoveLeftTriggered()
 {
-	if (GetPawn())
+	if (ControlPawn && !IsPaused())
 	{
 		GetPawn()->AddMovementInput(FVector(0, 1, 0), -MoveSpeed);
 	}
